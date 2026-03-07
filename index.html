@@ -110,6 +110,78 @@
         <div class="chart-wrap"><canvas id="sleepChart"></canvas></div>
       </div>
     </div>
+    <!-- LOG SLEEP -->
+    <div id="tab-log" class="tab-panel">
+      <div class="card">
+        <div class="card-title">🌙 Log Your Sleep</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Bedtime</label>
+            <input type="time" id="bedtime" />
+          </div>
+          <div class="form-group">
+            <label>Wake Time</label>
+            <input type="time" id="waketime" />
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="sleepdate" />
+          </div>
+          <div class="form-group">
+            <label>Sleep Quality</label>
+            <div class="stars">
+              <span class="star active" onclick="setQuality(1)">⭐</span>
+              <span class="star active" onclick="setQuality(2)">⭐</span>
+              <span class="star active" onclick="setQuality(3)">⭐</span>
+              <span class="star" onclick="setQuality(4)">⭐</span>
+              <span class="star" onclick="setQuality(5)">⭐</span>
+            </div>
+          </div>
+          <div class="form-group full">
+            <label>How did you feel on waking?</label>
+            <div class="mood-row">
+              <button class="mood-btn" onclick="setMood(this,'😴 Groggy')">😴 Groggy</button>
+              <button class="mood-btn" onclick="setMood(this,'😐 Okay')">😐 Okay</button>
+              <button class="mood-btn" onclick="setMood(this,'🙂 Good')">🙂 Good</button>
+              <button class="mood-btn" onclick="setMood(this,'⚡ Energized')">⚡ Energized</button>
+            </div>
+          </div>
+          <div class="form-group full">
+            <label>Journal / Notes</label>
+            <textarea id="journal" placeholder="What was on your mind? Any dreams? Stress?..."></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Tags</label>
+            <input type="text" id="tags" placeholder="e.g. caffeine, exercise, stress" />
+          </div>
+        </div>
+        <button class="btn-primary" onclick="saveSleep()">💾 Save Sleep Entry</button>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div id="tab-history" class="tab-panel">
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          📅 Sleep History
+          <button onclick="clearAll()" style="font-size:12px;background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer;color:var(--text-muted);">Clear All</button>
+        </div>
+        <div class="log-list" id="logList">
+          <div class="empty-state"><div class="icon">🛌</div><p>No sleep logs yet.<br>Log your first night!</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INSIGHTS -->
+    <div id="tab-tips" class="tab-panel">
+      <div class="card">
+        <div class="card-title">💡 Sleep Insights</div>
+        <div class="tip-card"><div class="tip-icon">🌙</div><div><div class="tip-title">Consistency is king</div><div class="tip-text">Same bedtime every day dramatically improves sleep quality.</div></div></div>
+        <div class="tip-card"><div class="tip-icon">📵</div><div><div class="tip-title">Blue light blocks melatonin</div><div class="tip-text">Avoid screens 1 hour before bed for deeper sleep.</div></div></div>
+        <div class="tip-card"><div class="tip-icon">🌡️</div><div><div class="tip-title">Cool room = deeper sleep</div><div class="tip-text">Ideal sleep temperature is 65–68°F (18–20°C).</div></div></div>
+        <div class="tip-card"><div class="tip-icon">☕</div><div><div class="tip-title">Cut caffeine after 2pm</div><div class="tip-text">Caffeine has a 6 hour half-life — that afternoon coffee ruins your sleep.</div></div></div>
+      </div>
+    </div>
 
   </div>
   <div class="toast" id="toast"></div>
