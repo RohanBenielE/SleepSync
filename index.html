@@ -185,5 +185,269 @@
 
   </div>
   <div class="toast" id="toast"></div>
+
+  <script>
+    let logs = JSON.parse(localStorage.getItem('sleepsync_logs') || '[]');
+    let quality = 3;
+    let mood = '';
+    let chartInstance = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const now = new Date();
+      document.getElementById('sleepdate').value = now.toISOString().split('T')[0];
+      document.getElementById('waketime').value = '07:00';
+      document.getElementById('bedtime').value = '23:00';
+      if (localStorage.getItem('sleepsync_theme') === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+      renderAll();
+    });
+
+    function toggleTheme() {
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+      document.documentElement.setAttribute('data-theme', isLight ? 'dark' : 'light');
+      localStorage.setItem('sleepsync_theme', isLight ? 'dark' : 'light');
+      setTimeout(renderChart, 50);
+    }
+
+    function switchTab(name, el) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      el.classList.add('active');
+      if (name === 'dashboard') setTimeout(renderChart, 50);
+    }
+
+    function setQuality(v) {
+      quality = v;
+      document.querySelectorAll('.star').forEach((s, i) => {
+        s.classList.toggle('active', i < v);
+      });
+    }
+
+    function setMood(el, val) {
+      document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
+      el.classList.add('selected');
+      mood = val;
+    }
+
+    function calcDuration(bedtime, waketime) {
+      const [bh, bm] = bedtime.split(':').map(Number);
+      const [wh, wm] = waketime.split(':').map(Number);
+      let mins = (wh * 60 + wm) - (bh * 60 + bm);
+      if (mins < 0) mins += 24 * 60;
+      return mins / 60;
+    }
+
+    function saveSleep() {
+      const bedtime = document.getElementById('bedtime').value;
+      const waketime = document.getElementById('waketime').value;
+      const date = document.getElementById('sleepdate').value;
+      const journal = document.getElementById('journal').value.trim();
+      const tags = document.getElementById('tags').value.trim();
+      if (!bedtime || !waketime || !date) { showToast('⚠️ Fill bedtime, wake time and date'); return; }
+      const duration = calcDuration(bedtime, waketime);
+      const entry = {
+        id: Date.now(), date, bedtime, waketime,
+        duration: Math.round(duration * 10) / 10,
+        quality, mood, journal, tags
+      };
+      logs.unshift(entry);
+      localStorage.setItem('sleepsync_logs', JSON.stringify(logs));
+      document.getElementById('journal').value = '';
+      document.getElementById('tags').value = '';
+      mood = '';
+      document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
+      renderAll();
+      showToast('✅ Sleep logged!');
+      switchTab('dashboard', document.querySelectorAll('.tab')[0]);
+    }
+
+    function renderAll() {
+      renderDashboard();
+      renderHistory();
+      renderChart();
+      renderStreak();
+    }
+
+    function renderDashboard() {
+      const total = logs.length;
+      document.getElementById('totalLogs').textContent = total;
+      if (total === 0) {
+        document.getElementById('avgDuration').textContent = '—';
+        document.getElementById('avgQuality').textContent = '—';
+        document.getElementById('scoreNum').innerHTML = '<span style="color:var(--text)">—</span><small style="color:var(--text-muted)">score</small>';
+        document.getElementById('scoreLabel').textContent = 'No data yet';
+        document.getElementById('scoreDesc').textContent = 'Log your first sleep to see your score.';
+        document.getElementById('debtLabel').textContent = '—';
+        document.getElementById('debtBar').style.width = '0%';
+        return;
+      }
+      const avgDur = logs.reduce((s, l) => s + l.duration, 0) / total;
+      const avgQ = logs.reduce((s, l) => s + l.quality, 0) / total;
+      document.getElementById('avgDuration').textContent = avgDur.toFixed(1) + 'h';
+      document.getElementById('avgQuality').textContent = avgQ.toFixed(1) + '★';
+      const score = Math.round((Math.min(avgDur / 8, 1) * 50) + ((avgQ / 5) * 50));
+      document.getElementById('scoreNum').innerHTML = '<span style="color:var(--text)">' + score + '</span><small style="color:var(--text-muted)">score</small>';
+      document.getElementById('scoreRing').style.strokeDashoffset = 283 - (283 * score / 100);
+      const labels = ['Poor', 'Fair', 'Average', 'Good', 'Excellent'];
+      const descs = [
+        'Your sleep needs attention. Focus on consistent bedtimes.',
+        'Some improvement needed. Try reducing screen time before bed.',
+        "You're doing okay! Small tweaks can push you higher.",
+        'Nice work! Your sleep habits are solid.',
+        "Excellent! You're optimizing your rest like a pro. 🎉"
+      ];
+      const idx = Math.min(Math.floor(score / 20), 4);
+      document.getElementById('scoreLabel').textContent = labels[idx] + ' Sleep';
+      document.getElementById('scoreDesc').textContent = descs[idx];
+      const last7 = logs.slice(0, 7);
+      const totalHrs = last7.reduce((s, l) => s + l.duration, 0);
+      const debt = Math.max(0, 56 - totalHrs);
+      document.getElementById('debtLabel').textContent = debt > 0 ? '-' + debt.toFixed(1) + 'h debt' : '✅ No debt!';
+      document.getElementById('debtBar').style.width = Math.min((totalHrs / 56) * 100, 100) + '%';
+      document.getElementById('debtBar').style.background = debt > 10
+        ? 'linear-gradient(90deg,#ff6a9b,#ff3a6a)'
+        : 'linear-gradient(90deg,var(--accent3),var(--accent))';
+    }
+
+    function renderChart() {
+      const canvas = document.getElementById('sleepChart');
+      if (!canvas) return;
+      const allLogs = [...logs].reverse();
+      const labels = allLogs.map(l => {
+        const d = new Date(l.date);
+        return d.getDate() + ' ' + d.toLocaleDateString('en', { month: 'short' });
+      });
+      const data = allLogs.map(l => l.duration);
+      if (chartInstance) chartInstance.destroy();
+      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+      const gridColor = isDark ? '#7c6aff22' : '#7c6aff18';
+      const tickColor = isDark ? '#9090b0' : '#6060a0';
+      chartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: labels.length ? labels : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+          datasets: [{
+            data: data.length ? data : [0,0,0,0,0,0,0],
+            borderColor: '#7c6aff',
+            borderWidth: 2.5,
+            pointBackgroundColor: '#ff6a9b',
+            pointBorderColor: isDark ? '#12121e' : '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 6,
+            pointHoverRadius: 9,
+            tension: 0.4,
+            fill: true,
+            backgroundColor: function(ctx) {
+              const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 220);
+              gradient.addColorStop(0, '#7c6aff44');
+              gradient.addColorStop(1, '#7c6aff00');
+              return gradient;
+            }
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: isDark ? '#1a1a2e' : '#ffffff',
+              titleColor: '#7c6aff',
+              bodyColor: isDark ? '#e8e8f0' : '#1a1a2e',
+              borderColor: '#7c6aff44',
+              borderWidth: 1,
+              padding: 10,
+              callbacks: { label: ctx => ' ' + ctx.raw + 'h sleep' }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: gridColor, lineWidth: 1 },
+              ticks: { color: tickColor, font: { size: 11 } }
+            },
+            y: {
+              min: 0, max: 12,
+              grid: { color: gridColor, lineWidth: 1 },
+              ticks: { color: tickColor, font: { size: 11 }, callback: v => v + 'h' }
+            }
+          }
+        }
+      });
+    }
+
+    function renderHistory() {
+      const list = document.getElementById('logList');
+      if (!logs.length) {
+        list.innerHTML = '<div class="empty-state"><div class="icon">🛌</div><p>No sleep logs yet.<br>Log your first night!</p></div>';
+        return;
+      }
+      list.innerHTML = logs.map(l => {
+        const d = new Date(l.date);
+        const stars = '⭐'.repeat(l.quality);
+        const note = l.journal ? '<div class="log-note">"' + l.journal + '"</div>' : '';
+        const tagsHtml = l.tags ? '<div style="font-size:11px;color:var(--accent);margin-top:4px;">' + l.tags.split(',').map(t => '#' + t.trim()).join(' ') + '</div>' : '';
+        return '<div class="log-item">' +
+          '<div class="log-date-badge"><div class="day">' + d.getDate() + '</div><div class="mon">' + d.toLocaleDateString('en',{month:'short'}) + '</div></div>' +
+          '<div class="log-info">' +
+            '<div class="log-duration">' + l.duration + 'h sleep</div>' +
+            '<div class="log-time">🛏 ' + l.bedtime + ' → ⏰ ' + l.waketime + ' ' + (l.mood||'') + '</div>' +
+            '<div style="font-size:12px">' + stars + '</div>' +
+            note + tagsHtml +
+          '</div>' +
+          '<button class="log-del" onclick="deleteLog(' + l.id + ')">🗑</button>' +
+        '</div>';
+      }).join('');
+    }
+
+    function renderStreak() {
+      let streak = 0;
+      const today = new Date();
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const ds = d.toISOString().split('T')[0];
+        if (logs.some(l => l.date === ds)) streak++;
+        else if (i > 0) break;
+      }
+      document.getElementById('streakText').textContent =
+        streak > 1 ? streak + ' day streak 🎯' :
+        streak === 1 ? '1 day — keep going!' :
+        'Start your streak tonight';
+    }
+
+    function deleteLog(id) {
+      logs = logs.filter(l => l.id !== id);
+      localStorage.setItem('sleepsync_logs', JSON.stringify(logs));
+      renderAll();
+      showToast('🗑 Entry deleted');
+    }
+
+    function clearAll() {
+      if (confirm('Clear all logs? Cannot be undone.')) {
+        logs = [];
+        localStorage.setItem('sleepsync_logs', JSON.stringify(logs));
+        renderAll();
+      }
+    }
+
+    function exportData() {
+      const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'sleepsync_export.json';
+      a.click();
+      showToast('📤 Data exported!');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+  </script>
 </body>
 </html>
