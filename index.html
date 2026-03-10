@@ -154,6 +154,7 @@ body {
       <button class="tab active" onclick="switchTab('dashboard', this)">📊 Dashboard</button>
       <button class="tab" onclick="switchTab('log', this)">➕ Log Sleep</button>
       <button class="tab" onclick="switchTab('history', this)">📅 History</button>
+      <button class="tab" onclick="switchTab('journal', this)">🎙️ Journal</button>
       <button class="tab" onclick="switchTab('tips', this)">💡 Insights</button>
     </div>
 
@@ -259,6 +260,45 @@ body {
       </div>
     </div>
 
+    <!-- JOURNAL TAB -->
+    <div id="tab-journal" class="tab-panel">
+      <div class="card">
+        <div class="card-title">🎙️ Audio Journal</div>
+        <div class="audio-recorder">
+          <div class="recorder-status" id="recorderStatus">
+            <div class="recorder-icon" id="recorderIcon">🎙️</div>
+            <div class="recorder-label" id="recorderLabel">Tap to Record</div>
+          </div>
+          <div class="recorder-controls">
+            <button class="btn-record" id="recordBtn" onclick="toggleRecording()">
+              🎙️ Start Recording
+            </button>
+            <button class="btn-play" id="playBtn" onclick="playRecording()" style="display:none">
+              🔊 Play Recording
+            </button>
+          </div>
+          <div class="recorder-timer" id="recorderTimer" style="display:none">
+            ⏱️ <span id="timerDisplay">0:00</span>
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:16px">
+          <label>Transcription / Notes</label>
+          <textarea id="journalTranscript" placeholder="Your voice will be transcribed here automatically... or type manually!"></textarea>
+        </div>
+        <div class="form-group" style="margin-top:12px">
+          <label>Date</label>
+          <input type="date" id="journalDate" />
+        </div>
+        <button class="btn-primary" onclick="saveJournalEntry()">💾 Save Journal Entry</button>
+      </div>
+
+      <div class="card" id="journalHistoryCard">
+        <div class="card-title">📖 Past Journal Entries</div>
+        <div id="journalList">
+          <div class="empty-state"><div class="icon">📝</div><p>No journal entries yet.<br>Record your first entry!</p></div>
+        </div>
+      </div>
+    </div>
     <!-- INSIGHTS -->
     <div id="tab-tips" class="tab-panel">
       <div class="card">
