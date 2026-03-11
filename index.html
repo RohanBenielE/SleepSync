@@ -542,6 +542,7 @@ body {
       renderHistory();
       renderChart();
       renderStreak();
+      renderJournalList();
     }
 
     function renderDashboard() {
@@ -715,6 +716,182 @@ body {
       a.click();
       showToast('📤 Data exported!');
     }
+
+    // AUDIO JOURNAL
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let audioBlob = null;
+    let audioUrl = null;
+    let recordingTimer = null;
+    let recordingSeconds = 0;
+    let isRecording = false;
+    let recognition = null;
+    let journalEntries = JSON.parse(localStorage.getItem('sleepsync_journal') || '[]');
+
+    function toggleRecording() {
+      if (!isRecording) startRecording();
+      else stopRecording();
+    }
+
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+          audioUrl = URL.createObjectURL(audioBlob);
+          document.getElementById('playBtn').style.display = 'inline-block';
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+
+        // UI updates
+        document.getElementById('recordBtn').textContent = '⏹️ Stop Recording';
+        document.getElementById('recordBtn').classList.add('recording');
+        document.getElementById('recorderIcon').textContent = '🔴';
+        document.getElementById('recorderIcon').classList.add('recording');
+        document.getElementById('recorderLabel').textContent = 'Recording...';
+        document.getElementById('recorderLabel').classList.add('recording');
+        document.getElementById('recorderTimer').style.display = 'block';
+
+        // Start timer
+        recordingSeconds = 0;
+        recordingTimer = setInterval(() => {
+          recordingSeconds++;
+          const mins = Math.floor(recordingSeconds / 60);
+          const secs = recordingSeconds % 60;
+          document.getElementById('timerDisplay').textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }, 1000);
+
+        // Start speech recognition
+        startTranscription();
+
+      } catch (err) {
+        showToast('⚠️ Microphone access denied!');
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+        mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      }
+      if (recordingTimer) clearInterval(recordingTimer);
+      if (recognition) recognition.stop();
+
+      isRecording = false;
+
+      // UI reset
+      document.getElementById('recordBtn').textContent = '🎙️ Record Again';
+      document.getElementById('recordBtn').classList.remove('recording');
+      document.getElementById('recorderIcon').textContent = '✅';
+      document.getElementById('recorderIcon').classList.remove('recording');
+      document.getElementById('recorderLabel').textContent = 'Recording saved!';
+      document.getElementById('recorderLabel').classList.remove('recording');
+    }
+
+    function playRecording() {
+      if (audioUrl) {
+        const audio = new Audio(audioUrl);
+        audio.play();
+        showToast('🔊 Playing recording...');
+      }
+    }
+
+    function startTranscription() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
+
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (e) => {
+        let transcript = '';
+        for (let i = 0; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript;
+        }
+        document.getElementById('journalTranscript').value = transcript;
+      };
+
+      recognition.start();
+    }
+
+    function saveJournalEntry() {
+      const text = document.getElementById('journalTranscript').value.trim();
+      const date = document.getElementById('journalDate').value;
+      if (!text && !audioUrl) { showToast('⚠️ Record or write something first!'); return; }
+      if (!date) { showToast('⚠️ Please select a date!'); return; }
+
+      const entry = {
+        id: Date.now(),
+        date,
+        text,
+        hasAudio: !!audioUrl,
+        audioUrl: audioUrl || null
+      };
+
+      journalEntries.unshift(entry);
+      localStorage.setItem('sleepsync_journal', JSON.stringify(journalEntries.map(e => ({...e, audioUrl: null}))));
+
+      // Reset
+      document.getElementById('journalTranscript').value = '';
+      audioBlob = null;
+      audioUrl = null;
+      document.getElementById('playBtn').style.display = 'none';
+      document.getElementById('recorderIcon').textContent = '🎙️';
+      document.getElementById('recorderLabel').textContent = 'Tap to Record';
+      document.getElementById('recorderTimer').style.display = 'none';
+      document.getElementById('timerDisplay').textContent = '0:00';
+      document.getElementById('recordBtn').textContent = '🎙️ Start Recording';
+
+      renderJournalList();
+      showToast('✅ Journal entry saved!');
+    }
+
+    function renderJournalList() {
+      const list = document.getElementById('journalList');
+      if (!list) return;
+      if (!journalEntries.length) {
+        list.innerHTML = '<div class="empty-state"><div class="icon">📝</div><p>No journal entries yet.<br>Record your first entry!</p></div>';
+        return;
+      }
+      list.innerHTML = journalEntries.map(e => {
+        const d = new Date(e.date);
+        const dateStr = d.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' });
+        return '<div class="journal-entry">' +
+          '<div class="journal-entry-header">' +
+            '<div class="journal-entry-date">📅 ' + dateStr + '</div>' +
+            '<div class="journal-entry-actions">' +
+              (e.hasAudio ? '<span style="font-size:11px;color:var(--accent2)">🎙️ has audio</span>' : '') +
+              '<button class="btn-play-small" onclick="deleteJournal(' + e.id + ')">🗑</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="journal-entry-text">"' + (e.text || 'No transcription') + '"</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function deleteJournal(id) {
+      journalEntries = journalEntries.filter(e => e.id !== id);
+      localStorage.setItem('sleepsync_journal', JSON.stringify(journalEntries));
+      renderJournalList();
+      showToast('🗑 Entry deleted');
+    }
+
+    // Init journal date
+    document.addEventListener('DOMContentLoaded', () => {
+      const journalDateEl = document.getElementById('journalDate');
+      if (journalDateEl) {
+        journalDateEl.value = new Date().toISOString().split('T')[0];
+      }
+      renderJournalList();
+    });
 
     function showToast(msg) {
       const t = document.getElementById('toast');
