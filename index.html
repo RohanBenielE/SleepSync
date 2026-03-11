@@ -802,25 +802,48 @@ body {
       }
     }
 
-    function startTranscription() {
+   function startTranscription() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) return;
+      if (!SpeechRecognition) {
+        showToast('⚠️ Transcription not supported, but recording works!');
+        return;
+      }
 
-      recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
+      try {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
 
-      recognition.onresult = (e) => {
-        let transcript = '';
-        for (let i = 0; i < e.results.length; i++) {
-          transcript += e.results[i][0].transcript;
-        }
-        document.getElementById('journalTranscript').value = transcript;
-      };
+        let finalTranscript = '';
 
-      recognition.start();
-    }
+        recognition.onresult = (e) => {
+          let interimTranscript = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              finalTranscript += e.results[i][0].transcript + ' ';
+            } else {
+              interimTranscript += e.results[i][0].transcript;
+            }
+          }
+          document.getElementById('journalTranscript').value = finalTranscript + interimTranscript;
+        };
+
+        recognition.onerror = (e) => {
+          if (e.error !== 'no-speech') {
+            showToast('🎙️ Recording saved! Transcription: ' + e.error);
+          }
+        };
+
+        recognition.onend = () => {
+          if (isRecording) recognition.start();
+        };
+
+        recognition.start();
+      } catch(err) {
+        showToast('⚠️ Recording works but transcription unavailable');
+      }
+   }
 
     function saveJournalEntry() {
       const text = document.getElementById('journalTranscript').value.trim();
